@@ -12290,20 +12290,20 @@ keywords relative to each registered export back-end."
     "TITLE:" "TODO:" "TYP_TODO:" "SELECT_TAGS:" "EXCLUDE_TAGS:"))
 
 (defcustom org-structure-template-alist
-  '(("s" "#+BEGIN_SRC ?\n\n#+END_SRC")
-    ("e" "#+BEGIN_EXAMPLE\n?\n#+END_EXAMPLE")
-    ("q" "#+BEGIN_QUOTE\n?\n#+END_QUOTE")
-    ("v" "#+BEGIN_VERSE\n?\n#+END_VERSE")
-    ("V" "#+BEGIN_VERBATIM\n?\n#+END_VERBATIM")
-    ("c" "#+BEGIN_CENTER\n?\n#+END_CENTER")
-    ("l" "#+BEGIN_LaTeX\n?\n#+END_LaTeX")
-    ("L" "#+LaTeX: ")
-    ("h" "#+BEGIN_HTML\n?\n#+END_HTML")
-    ("H" "#+HTML: ")
-    ("a" "#+BEGIN_ASCII\n?\n#+END_ASCII")
-    ("A" "#+ASCII: ")
-    ("i" "#+INDEX: ?")
-    ("I" "#+INCLUDE: %file ?"))
+  '(("s" "#+BEGIN_SRC ?\n~\n#+END_SRC" "[s]ource")
+    ("e" "#+BEGIN_EXAMPLE\n~?\n#+END_EXAMPLE" "[e]xample")
+    ("q" "#+BEGIN_QUOTE\n~?\n#+END_QUOTE" "[q]uote")
+    ("v" "#+BEGIN_VERSE\n~?\n#+END_VERSE" "[v]erse")
+    ("V" "#+BEGIN_VERBATIM\n~?\n#+END_VERBATIM" "[V]erbatim")
+    ("c" "#+BEGIN_CENTER\n~?\n#+END_CENTER" "[c]enter")
+    ("l" "#+BEGIN_LaTeX\n~?\n#+END_LaTeX" "[l]aTeX")
+    ("L" "#+LaTeX: ~" "[L]aTex-inline")
+    ("h" "#+BEGIN_HTML\n~?\n#+END_HTML" "[h]TML")
+    ("H" "#+HTML: ~" "[H]TML-inline")
+    ("a" "#+BEGIN_ASCII\n~?\n#+END_ASCII" "[a]SCII")
+    ("A" "#+ASCII: ~" "[A]SCII-inline")
+    ("i" "#+INDEX: ~?" "[i]ndex-inline")
+    ("I" "#+INCLUDE: %file ?" "[I]nclude"))
   "Structure completion elements.
 This is a list of abbreviation keys and values.  The value gets inserted
 if you type `<' followed by the key and then press the completion key,
@@ -12322,7 +12322,7 @@ variable `org-mtags-prefer-muse-templates'."
   :version "25.1"
   :package-version '(Org . "8.3"))
 
-(defun org-try-structure-completion ()
+(defun org-try-structure-completion (&optional include)
   "Try to complete a structure template before point.
 This looks for strings like \"<e\" on an otherwise empty line and
 expands them."
@@ -12332,10 +12332,10 @@ expands them."
 	       (string-match "^[ \t]*<\\([a-zA-Z]+\\)$" l)
 	       (setq a (assoc (match-string 1 l) org-structure-template-alist)))
       (org-complete-expand-structure-template (+ -1 (point-at-bol)
-						 (match-beginning 1)) a)
+						 (match-beginning 1)) a nil include)
       t)))
 
-(defun org-complete-expand-structure-template (start cell)
+(defun org-complete-expand-structure-template (start cell &optional content include)
   "Expand a structure template."
   (let ((rpl (nth 1 cell))
 	(ind ""))
@@ -12348,17 +12348,45 @@ expands them."
        (t (newline))))
     (setq start (point))
     (when (string-match "%file" rpl)
+      (if (not include)
+	(setq include (save-match-data
+	  (abbreviate-file-name (read-file-name "Include file: ")))))
+	  
       (setq rpl (replace-match
-		 (concat
-		  "\""
-		  (save-match-data
-		    (abbreviate-file-name (read-file-name "Include file: ")))
-		  "\"")
+		 (concat "\"" include "\"")
 		 t t rpl)))
     (setq rpl (mapconcat 'identity (split-string rpl "\n")
 			 (concat "\n" ind)))
+
+    (when (string-match "~" rpl)
+      (if (not content)
+	(setq content ""))
+      (setq rpl (replace-match content t t rpl)))
+
     (insert rpl)
-    (when (re-search-backward "\\?" start t) (delete-char 1))))
+    (let ((currentpos (point)))
+      (goto-char start)
+      (if (re-search-forward "\\?" (+ start (length rpl)) t)
+	(delete-char -1)
+	(goto-char currentpos)))))
+
+(defun org-surround-region-with (&optional type include)
+  "Surround region with structure template"
+  (interactive "P")
+  (let ((keychoices (apply #'concat (mapcar #'car org-structure-template-alist)))
+	(nicechoices (mapconcat 'identity (mapcar (lambda (cell) (nth 2 cell)) org-structure-template-alist) " ")))
+    (if (not type)
+      (progn
+	(message
+	  (concat "Block template type: " nicechoices ""))
+	(setq type (format "%c" (read-char-exclusive)))))
+    
+    (if (string-match type keychoices)
+      (let* ((a (assoc type org-structure-template-alist))
+    	     (content (buffer-substring (region-beginning) (region-end))))
+    	(delete-region (region-beginning) (region-end))
+    	(org-complete-expand-structure-template (point) a content include))
+      (user-error "No such template type \"%s\"" type))))
 
 ;;;; TODO, DEADLINE, Comments
 
@@ -19797,6 +19825,7 @@ boundaries."
 (org-defkey org-mode-map [(control shift left)]  'org-shiftcontrolleft)
 (org-defkey org-mode-map [(control shift up)] 'org-shiftcontrolup)
 (org-defkey org-mode-map [(control shift down)]  'org-shiftcontroldown)
+(org-defkey org-mode-map "\C-cb" 'org-surround-region-with)
 
 ;; Babel keys
 (define-key org-mode-map org-babel-key-prefix org-babel-map)

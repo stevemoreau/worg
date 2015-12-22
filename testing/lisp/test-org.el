@@ -4388,6 +4388,109 @@ Paragraph<point>"
     (should (equal '(0 1 3 4 5 7 8 9 11 12 13)
 		   (funcall list-visible-lines 'canonical nil)))))
 
+;; test template block (eg. <e TAB ==> #+BEGIN_EXAMPLE ...)
+(defun test-helper-try-structure-completion (type suffix &optional inline)
+  "Run a single test over org-try-structure-completion"
+  (let ((expected)
+	(whitespaces "")
+	(include nil))
+    (if (string= "s" type)
+      (setq whitespaces " "))
+
+    (setq expected (format "#+BEGIN_%s%s
+
+#+END_%s" suffix whitespaces suffix))
+    (if inline
+      (setq expected (format "#+%s: " suffix)))
+
+    (if (string= "I" type)
+      (progn
+	(setq include "includeFileName.extension")
+	(setq expected (format "#+%s: \"%s\" " suffix include))))
+    
+    (should
+      (equal expected
+	     (org-test-with-temp-text (concat "<" type "<point>")
+	       (progn
+		 (org-try-structure-completion include)
+		 (buffer-string)))))))
+
+(ert-deftest test-org/try-structure-completion ()
+  "Test `org-try-structure-completion' specifications."
+  (test-helper-try-structure-completion "s" "SRC")
+  (test-helper-try-structure-completion "e" "EXAMPLE")
+  (test-helper-try-structure-completion "q" "QUOTE")
+  (test-helper-try-structure-completion "v" "VERSE")
+  (test-helper-try-structure-completion "V" "VERBATIM")
+  (test-helper-try-structure-completion "c" "CENTER")
+  (test-helper-try-structure-completion "l" "LaTeX")
+  (test-helper-try-structure-completion "L" "LaTeX" t)
+  (test-helper-try-structure-completion "h" "HTML")
+  (test-helper-try-structure-completion "H" "HTML" t)
+  (test-helper-try-structure-completion "a" "ASCII")
+  (test-helper-try-structure-completion "A" "ASCII" t)
+  (test-helper-try-structure-completion "i" "INDEX" t)
+  (test-helper-try-structure-completion "I" "INCLUDE" t)
+)
+
+;; test template block region surrounding
+;; (eg. regionText ==> #+BEGIN_EXAMPLE regionText ...)
+(defun test-helper-surround-region-with (type suffix &optional inline)
+  "Run a single test over org-surround-region-with"
+  (let ((expected)
+	(whitespaces "")
+	(include nil))
+    (if (string= "s" type)
+      (setq whitespaces " "))
+
+    (setq expected (format "#+BEGIN_%s%s
+selected text
+#+END_%s" suffix whitespaces suffix))
+    (if inline
+      (setq expected (format "#+%s: selected text" suffix)))
+
+    (if (string= "I" type)
+      (progn
+	(setq include "includeFileName.extension")
+	(setq expected (format "#+%s: \"%s\" " suffix include))))
+    
+    (should
+      (equal expected
+	     (org-test-with-temp-text "selected text"
+	       (progn
+		 (transient-mark-mode 1)
+		 (push-mark (point) t t)
+		 (goto-char (point-max))
+		 (org-surround-region-with type include)
+		 (buffer-string)))))))
+
+(ert-deftest test-org/surround-region-with ()
+  "Test `org-surround-region-with' specifications."
+  (test-helper-surround-region-with "s" "SRC")
+  (test-helper-surround-region-with "e" "EXAMPLE")
+  (test-helper-surround-region-with "q" "QUOTE")
+  (test-helper-surround-region-with "v" "VERSE")
+  (test-helper-surround-region-with "V" "VERBATIM")
+  (test-helper-surround-region-with "c" "CENTER")
+  (test-helper-surround-region-with "l" "LaTeX")
+  (test-helper-surround-region-with "L" "LaTeX" t)
+  (test-helper-surround-region-with "h" "HTML")
+  (test-helper-surround-region-with "H" "HTML" t)
+  (test-helper-surround-region-with "a" "ASCII")
+  (test-helper-surround-region-with "A" "ASCII" t)
+  (test-helper-surround-region-with "i" "INDEX" t)
+  (test-helper-surround-region-with "I" "INCLUDE" t)
+
+  (should
+   (equal "#+BEGIN_SRC \nselected text with quotation mark? inside\n#+END_SRC"
+	  (org-test-with-temp-text "selected text with quotation mark? inside"
+	    (progn
+	      (transient-mark-mode 1)
+	      (push-mark (point) t t)
+	      (goto-char (point-max))
+	      (org-surround-region-with "s")
+	      (buffer-string)))))
+)
 
 (provide 'test-org)
 
